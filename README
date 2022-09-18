@@ -1,0 +1,4 @@
+cd /analysis/Tb_profile/
+
+Try to open the Jupyter Notebook and run it.
+The necessary packages are listed at the beginnig of the Jupyter Notebook.

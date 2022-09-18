@@ -123,6 +123,9 @@ class profilefit:
             self.load_profile(filename = filename)
             
         self.if_mcmcSummarized = False
+        self.get_model         = None
+        self.parms             = None
+
     
     def __del__(self):
         pass
@@ -161,8 +164,11 @@ class profilefit:
             print('Loading file :', filename)
             
             # low data and obtain basic parameters
-            self.DataFrame = pd.read_csv(filename, sep=' ', usecols = [0, 1, 2],
-                                         header=None, names=["offset", "intensity", "intensity_err"])
+            self.DataFrame = pd.read_csv(filename, sep=' ', usecols = [0,1,2],
+                                         header=None,
+                                         # names=["offset", "intensity", "intensity_err"]
+                                         names=["intensity_err","offset","intensity"]
+                                        )
             self.num_rows = np.size(self.DataFrame.intensity)
             self.ifBrightness = ifBrightness
                         
@@ -173,14 +179,9 @@ class profilefit:
             self.DataFrame.offset[elements] = 1e-15
             ######################################################################
             
-            ### Give zero uncertainties with some values #########################
+            # set intensity error to certain value ###############################
             # this part is very unhealthy. Should fix the measurement
-            self.DataFrame.intensity_err = self.DataFrame.intensity_err
-            elements = np.where(self.DataFrame.intensity_err == 0.0
-                               )
-            elements = np.array(elements[0])
-            self.DataFrame.intensity_err[elements] = \
-               self.DataFrame.intensity_err[elements] + 0.00001
+            self.DataFrame.intensity_err = np.zeros(self.num_rows) + 1e-6
             ######################################################################
   
             # rescale units
@@ -535,8 +536,6 @@ class profilefit:
                                        np.array(self.DataFrame.offset),
                                        self.parms
                                       )                
-                # Smooth model to the observed resolution
-                model = self.gaussian_convolve(model, np.array(self.DataFrame.offset), self.sigma)
                 plt.plot(self.DataFrame.offset, model,
                        color=model_color, linewidth=model_linewidth )
             #except:
@@ -566,48 +565,6 @@ class profilefit:
     #     Internal function
     ########################################################################################
 
-    def gaussian_1d(self, x, x0, sigma):
-        '''
-        Return a Gaussian distribution that is normalized to 1.0
-                
-        Input:
-            x [1d np array] : offset
-            x0 [float]      : central position of the Gaussian
-            sigma [float]   : standard deviation of the Gaussian
-            
-        Return:
-            [1d np array]   : A 1-dim Gaussian function that has the same size as the x array.
-        '''
-        A = 1.0 / (sigma * np.sqrt(2.0 * np.pi))
-        B = -0.5 * (( (x - x0)/sigma )**2.0)
-        
-        return A * np.exp(B)    
-    
-    
-    def gaussian_convolve(self, function, x, sigma):
-        '''
-        Return a convolution of function with a 1d gaussian that has sigma standard deviation.
-        
-        Input:
-            function [1d np array] : A 1-dim function to be convolved with a Gaussian;
-                                     this function is a function of offset x.
-            x [1d np array]        : offset
-            sigma [float]          : standard deviation of the Gaussian.
-        
-        Return:
-            [1d np array] : The 1-dim Gaussian-smoothed input function
-        '''
-        num_ele      = np.size(function)
-        out_function = np.zeros(num_ele)
-        delta_x      = np.absolute( x[1] - x[0] )
-        
-        for i in range(0, num_ele):
-            x0 = x[i]
-            out_function += function[i] * self.gaussian_1d(x, x0, sigma) * delta_x
-        
-        return out_function    
-    
-    
     def lnprob(self, parms, x, y, yerr, 
                model_func, 
                lnprior_func
@@ -634,19 +591,9 @@ class profilefit:
         
         # evalute model profile
         model = self.get_model(x, parms)
-    
-        # smooth the model
-        model = self.gaussian_convolve(model, x, self.sigma)
         model = np.array(model)
         
         # evaluate log probability
-        '''
-        index     = np.where( yerr > 0 )
-        index     = np.array( index[0] )
-        
-        y         = np.array( y )
-        yerr      = np.array( yerr )
-        '''
         index = np.where(
                           ( 
                             (x > self.xrange[0]) &
